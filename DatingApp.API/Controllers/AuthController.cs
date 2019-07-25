@@ -3,6 +3,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using AutoMapper;
 using DatingApp.API.Data;
 using DatingApp.API.Dtos;
 using DatingApp.API.Models;
@@ -18,8 +19,10 @@ namespace DatingApp.API.Controllers
   {
     private readonly IAuthRepository repo;
     private readonly IConfiguration config;
-    public AuthController(IAuthRepository repo, IConfiguration config)
+    private readonly IMapper mapper;
+    public AuthController(IAuthRepository repo, IConfiguration config, IMapper mapper)
     {
+      this.mapper = mapper;
       this.repo = repo;
       this.config = config;
     }
@@ -29,17 +32,17 @@ namespace DatingApp.API.Controllers
     {
       userForRegisterDto.Username = userForRegisterDto.Username.ToLower();
 
-      if(await repo.UserExists(userForRegisterDto.Username)) 
+      if (await repo.UserExists(userForRegisterDto.Username))
         return BadRequest("Username already exists");
 
-        var userToCreate = new User()
-        {
-          Username = userForRegisterDto.Username
-        };
+      var userToCreate = new User()
+      {
+        Username = userForRegisterDto.Username
+      };
 
-        var createdUser = await repo.Register(userToCreate, userForRegisterDto.Password);
+      var createdUser = await repo.Register(userToCreate, userForRegisterDto.Password);
 
-        return StatusCode(201); //TODO Update to CreateOnRoute
+      return StatusCode(201); //TODO Update to CreateOnRoute
     }
 
     [HttpPost("login")]
@@ -47,7 +50,7 @@ namespace DatingApp.API.Controllers
     {
       var userFromRepo = await repo.Login(userForLoginDto.UserName.ToLower(), userForLoginDto.Password);
 
-      if(ReferenceEquals(userFromRepo,null))
+      if (ReferenceEquals(userFromRepo, null))
         return Unauthorized();
 
       var claims = new[]
@@ -59,21 +62,25 @@ namespace DatingApp.API.Controllers
       var key = new SymmetricSecurityKey(Encoding.UTF8
         .GetBytes(config.GetSection("AppSettings:Token").Value));
 
-        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
+      var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
 
-        var tokenDescriptor = new SecurityTokenDescriptor()
+      var tokenDescriptor = new SecurityTokenDescriptor()
+      {
+        Subject = new ClaimsIdentity(claims),
+        Expires = DateTime.Now.AddDays(1),
+        SigningCredentials = creds
+      };
+
+      var tokenHandler = new JwtSecurityTokenHandler();
+
+      var token = tokenHandler.CreateToken(tokenDescriptor);
+
+      var user = mapper.Map<UserForListDto>(userFromRepo);
+
+        return Ok(new
         {
-          Subject = new ClaimsIdentity(claims),
-          Expires = DateTime.Now.AddDays(1),
-          SigningCredentials = creds
-        };
-
-        var tokenHandler = new JwtSecurityTokenHandler();
-
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-
-        return Ok(new {
-          token = tokenHandler.WriteToken(token)
+          token = tokenHandler.WriteToken(token),
+          user
         });
     }
   }
