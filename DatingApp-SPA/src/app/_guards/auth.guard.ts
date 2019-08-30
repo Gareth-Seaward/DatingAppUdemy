@@ -27,11 +27,27 @@ export class AuthGuard implements CanActivate {
     | Promise<boolean | UrlTree>
     | boolean
     | UrlTree {
+    // tslint:disable-next-line: no-string-literal
+    const roles = next.firstChild.data['roles'] as Array<string>;
+    if (roles) {
+      const match = this.authService.roleMatch(roles);
+      if (match) {
+        return true;
+      } else {
+        this.router.navigate(['members']);
+        // tslint:disable-next-line: quotemark
+        this.alertifyService.error(
+          'You are not authorized to access this area'
+        );
+      }
+    }
+
     if (this.authService.loggedIn()) {
       return true;
     }
 
     this.alertifyService.error('Cannot access this item.');
+
     this.router.navigate(['/home']);
     return false;
   }

@@ -6,6 +6,7 @@ import { BehaviorSubject } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { environment } from 'src/environments/environment';
 import { User } from '../_models/user';
+import { all } from 'q';
 
 @Injectable({
   providedIn: 'root'
@@ -35,6 +36,7 @@ login(model: any) {
         this.decodedToken = this.jwtHelper.decodeToken(user.token);
         this.currentUser = user.user;
         this.changeMemberPhoto(this.currentUser.photoUrl);
+        console.log(this.currentUser);
       }
     }));
 }
@@ -46,6 +48,19 @@ register(user: User) {
 loggedIn() {
   const token = localStorage.getItem('token');
   return !this.jwtHelper.isTokenExpired(token);
+}
+
+roleMatch(allowedRoles): boolean {
+  let isMatch  = false;
+  const userRoles = this.decodedToken.role as Array<string>;
+
+  allowedRoles.forEach(element => {
+    if (userRoles.includes(element)) {
+      isMatch = true;
+      return;
+    }
+  });
+  return isMatch;
 }
 
 }

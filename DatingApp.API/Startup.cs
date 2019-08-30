@@ -21,6 +21,10 @@ using Microsoft.AspNetCore.Http;
 using DatingApp.API.Helpers;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.AspNetCore.Identity;
+using DatingApp.API.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.Authorization;
 
 namespace DatingApp.API
 {
@@ -38,15 +42,20 @@ namespace DatingApp.API
         {
             services.AddDbContext<DataContext>(x => x.UseSqlite(Configuration.GetConnectionString("DefaultConnection"))
             .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.IncludeIgnoredWarning)));
-            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1).AddJsonOptions(opt => {
-              opt.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore;
+
+            IdentityBuilder builder = services.AddIdentityCore<User>(opt => {
+              opt.Password.RequireDigit = false;
+              opt.Password.RequiredLength = 4;
+              opt.Password.RequireNonAlphanumeric = false;
+              opt.Password.RequireUppercase = false; // Dont do this for real.
             });
-            services.AddCors();
-            services.Configure<CloudinarySettings>(Configuration.GetSection("CloudinarySettings"));
-            services.AddAutoMapper();
-            services.AddTransient<Seed>();
-            services.AddScoped<IAuthRepository, AuthRepository>();
-            services.AddScoped<IDatingRepository, DatingRepository>();
+
+            builder = new IdentityBuilder(builder.UserType, typeof(Role), builder.Services);
+            builder.AddEntityFrameworkStores<DataContext>(); //User EF as the Store
+            builder.AddRoleValidator<RoleValidator<Role>>();
+            builder.AddRoleManager<RoleManager<Role>>();
+            builder.AddSignInManager<SignInManager<User>>(); //Manul set up as we are using AddIdentityCore not AddIdentity
+
             services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             .AddJwtBearer( options => {
               options.TokenValidationParameters = new TokenValidationParameters()
@@ -59,6 +68,32 @@ namespace DatingApp.API
                 ValidateAudience = false
               };
             });
+
+            services.AddAuthorization(options => 
+            {
+              options.AddPolicy("RequireAdminRole", policy => policy.RequireRole("Admin"));
+              options.AddPolicy("ModeratePhotoRole", policy => policy.RequireRole("Admin", "Moderator"));
+              options.AddPolicy("VipOnly", policy => policy.RequireRole("Vip"));
+            });
+
+            services.AddMvc(options => {
+              var policy = new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .Build();
+
+                options.Filters.Add(new AuthorizeFilter(policy));
+            }) // instead of using [Authorize] attributes
+            .SetCompatibilityVersion(CompatibilityVersion.Version_2_1)
+            .AddJsonOptions(opt => {
+              opt.SerializerSettings.ReferenceLoopHandling = Newtonsoft.Json.ReferenceLoopHandling.Ignore;
+            });
+            services.AddCors();
+            services.Configure<CloudinarySettings>(Configuration.GetSection("CloudinarySettings"));
+            Mapper.Reset(); //Method is called twice on DB Drop, used to circumvent error on Mapper, Show be wrapped in check for Dev env
+            services.AddAutoMapper();
+            services.AddTransient<Seed>();
+            services.AddScoped<IDatingRepository, DatingRepository>();
+            
             services.AddScoped<LogUserActivity>();
         }
 

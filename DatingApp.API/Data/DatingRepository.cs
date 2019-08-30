@@ -40,14 +40,20 @@ namespace DatingApp.API.Data
 
     public async Task<Photo> GetPhoto(int id)
     {
-      var photo = await context.Photos.FirstOrDefaultAsync(p => p.Id == id);
+      var photo = await context.Photos
+        .IgnoreQueryFilters()
+        .FirstOrDefaultAsync(p => p.Id == id);
       return photo;
     }
 
-    public async Task<User> GetUser(int id)
+    public async Task<User> GetUser(int id, bool isCurrentUser)
     {
-      var user = await context.Users
-        .Include(p => p.Photos)
+      var query = context.Users.Include(p => p.Photos).AsQueryable();
+
+      if(isCurrentUser)
+        query = query.IgnoreQueryFilters();
+
+      var user = await query
         .FirstOrDefaultAsync(u => u.Id == id);
 
       return user;
